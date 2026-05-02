@@ -9,12 +9,15 @@ class Task extends Model
     protected $fillable = [
         'list_id', 'user_id', 'title', 'note', 'due_date',
         'priority', 'status', 'is_my_day', 'position', 'completed_at',
+        'reminder', 'color', 'emoji', 'pinned',
     ];
 
     protected $casts = [
         'is_my_day'    => 'boolean',
+        'pinned'       => 'boolean',
         'completed_at' => 'datetime',
         'due_date'     => 'datetime',
+        'reminder'     => 'datetime',
     ];
 
     public function user()

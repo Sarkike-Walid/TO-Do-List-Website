@@ -102,6 +102,7 @@ class TodoController extends Controller
         $fields = $request->only([
             'title', 'note', 'due_date', 'priority', 'status',
             'is_my_day', 'list_id', 'position',
+            'reminder', 'color', 'emoji', 'pinned',
         ]);
 
         // Handle completion timestamp
@@ -259,6 +260,10 @@ class TodoController extends Controller
             'note'      => $task->note,
             'due_date'  => $task->due_date?->toDateString(),
             'is_my_day' => (bool) $task->is_my_day,
+            'reminder'  => $task->reminder?->format('Y-m-d\TH:i'),
+            'color'     => $task->color,
+            'emoji'     => $task->emoji,
+            'pinned'    => (bool) $task->pinned,
             'tag'       => $task->tags->first()?->name ?? '',
             'tag_id'    => $task->tags->first()?->id ?? null,
             'subtasks'  => $task->subtasks->map(fn($s) => [

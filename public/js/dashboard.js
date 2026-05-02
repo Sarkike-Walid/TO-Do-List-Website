@@ -28,19 +28,169 @@ document.addEventListener('alpine:init', () => {
     searchQuery:   '',
     searchOpen:    false,
     loading:       false,
+    filterStatus:  'all',
+    sortBy:        'none',
+    notifOpen:     false,
+    dismissedNotifs: [],
+    taskColors: ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#c4a882','#e91e63','#607d8b'],
+    quickEmojis: ['✅','🔥','📚','🕒','⭐','🎯','💡','📌','🚀','💪','⚡','🎉','🧠','🏆','⏰','🗓️','📋','🛠️'],
+    
+    /* ── Settings State ── */
+    showSettingsModal: false,
+    settingsTab: 'profile',
+    userEmail: '',
+    userAvatar: '',
+    settingsName: '',
+    settingsEmail: '',
+    settingsCurrentPassword: '',
+    settingsNewPassword: '',
+    settingsConfirmPassword: '',
+    theme: 'light',
 
     /* ── Init ── */
     async init() {
       this.userName = document.getElementById('app-user-name')?.value || 'User';
+      this.userEmail = document.getElementById('app-user-email')?.value || '';
+      this.userAvatar = document.getElementById('app-user-avatar')?.value || '';
       this.popSound = this.createPopSound();
 
-      // Restore dark mode from localStorage (UI preference, not data)
+      const validTabs = ['my-day', 'next-7-days', 'all-tasks', 'my-lists', 'tags'];
+      
+      // Check URL path for initial tab
+      const pathParts = window.location.pathname.split('/');
+      const pathTab = pathParts.length > 2 ? pathParts[2] : '';
+      if (validTabs.includes(pathTab)) {
+          this.currentTab = pathTab;
+      }
+
+      // Watch for changes to currentTab and update the URL
+      this.$watch('currentTab', (value) => {
+          const expectedPath = '/dashboard/' + value;
+          if (window.location.pathname !== expectedPath && validTabs.includes(value)) {
+              window.history.pushState(null, '', expectedPath);
+          }
+      });
+
+      // Handle browser back/forward buttons
+      window.addEventListener('popstate', () => {
+          const parts = window.location.pathname.split('/');
+          const tab = parts.length > 2 ? parts[2] : 'my-day';
+          if (validTabs.includes(tab)) {
+              this.currentTab = tab;
+          } else {
+              this.currentTab = 'my-day';
+          }
+      });
+
+      // Restore dark mode from localStorage
       const dm = localStorage.getItem('lumido_dark');
       this.darkMode = dm === 'true';
+      this.theme = this.darkMode ? 'dark' : 'light';
       this.applyDarkMode();
+
+      // Restore dismissed notifications
+      const dismissed = localStorage.getItem('lumido_dismissed_notifs');
+      this.dismissedNotifs = dismissed ? JSON.parse(dismissed) : [];
 
       // Load user data from DB
       await this.loadBootstrap();
+    },
+
+    /* ── Settings Methods ── */
+    openSettings() {
+      this.settingsName = this.userName;
+      this.settingsEmail = this.userEmail;
+      this.settingsCurrentPassword = '';
+      this.settingsNewPassword = '';
+      this.settingsConfirmPassword = '';
+      this.settingsTab = 'profile';
+      this.showSettingsModal = true;
+    },
+
+    setTheme(newTheme) {
+      this.theme = newTheme;
+      this.darkMode = newTheme === 'dark';
+      this.applyDarkMode();
+    },
+
+    async uploadAvatar(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      try {
+        const res = await fetch('/profile/avatar/ajax', {
+          method: 'POST',
+          headers: { 'X-CSRF-TOKEN': this.csrfToken() },
+          body: formData
+        });
+        const data = await res.json();
+        if (data.status === 'avatar-updated') {
+          this.userAvatar = data.avatar_url;
+          this.showToast('Profile photo updated.');
+        } else {
+          this.showToast('Failed to upload photo.', true);
+        }
+      } catch (err) {
+        this.showToast('Error uploading photo.', true);
+      }
+    },
+
+    async updateProfile() {
+      try {
+        const res = await fetch('/profile/ajax', {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': this.csrfToken()
+          },
+          body: JSON.stringify({
+            name: this.settingsName,
+            email: this.settingsEmail
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          this.userName = data.user.name;
+          this.userEmail = data.user.email;
+          this.showToast('Profile updated successfully.');
+        } else {
+          const err = await res.json();
+          this.showToast(err.message || 'Validation failed', true);
+        }
+      } catch (err) {
+        this.showToast('Error updating profile.', true);
+      }
+    },
+
+    async updatePassword() {
+      try {
+        const res = await fetch('/profile/password/ajax', {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': this.csrfToken()
+          },
+          body: JSON.stringify({
+            current_password: this.settingsCurrentPassword,
+            password: this.settingsNewPassword,
+            password_confirmation: this.settingsConfirmPassword
+          })
+        });
+        if (res.ok) {
+          this.showToast('Password updated securely.');
+          this.settingsCurrentPassword = '';
+          this.settingsNewPassword = '';
+          this.settingsConfirmPassword = '';
+        } else {
+          const err = await res.json();
+          this.showToast(err.message || 'Password update failed', true);
+        }
+      } catch (err) {
+        this.showToast('Error updating password.', true);
+      }
     },
 
     /* ── API helpers ── */
@@ -162,6 +312,131 @@ document.addEventListener('alpine:init', () => {
       return this.lists.find(l => l.id === id)?.name ?? '';
     },
 
+    /* ── Filter & Sort ── */
+    filteredSortedTasks() {
+      let t = [...this.tasks];
+      if (this.filterStatus === 'active')    t = t.filter(x => !x.completed);
+      if (this.filterStatus === 'completed') t = t.filter(x =>  x.completed);
+      if (this.sortBy === 'name') {
+        t.sort((a, b) => a.title.localeCompare(b.title));
+      } else if (this.sortBy === 'date') {
+        t.sort((a, b) => (a.due_date || '9999') < (b.due_date || '9999') ? -1 : 1);
+      } else if (this.sortBy === 'priority') {
+        const rank = { high: 0, medium: 1, low: 2, none: 3, '': 3, undefined: 3 };
+        t.sort((a, b) => (rank[a.priority] ?? 3) - (rank[b.priority] ?? 3));
+      }
+      // Pinned always at top
+      t.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+      return t;
+    },
+
+    /* ── Progress ── */
+    taskProgressPct(task) {
+      if (!task.subtasks || task.subtasks.length === 0) return 0;
+      return Math.round((task.subtasks.filter(s => s.done).length / task.subtasks.length) * 100);
+    },
+
+    /* ── Notifications ── */
+    notifItems() {
+      const items = [];
+      const now   = new Date();
+      const today = this.getDateStr(0);
+
+      this.tasks.forEach(task => {
+        if (task.completed) return;
+
+        // Reminder: has a reminder datetime that is within the next 24h or already past
+        if (task.reminder) {
+          const reminderTime = new Date(task.reminder);
+          const diffMs = reminderTime - now;
+          const diffH  = diffMs / (1000 * 60 * 60);
+          if (diffH <= 24) {
+            const id = 'reminder-' + task.id;
+            if (!this.dismissedNotifs.includes(id)) {
+              const isPast = diffMs < 0;
+              items.push({
+                id,
+                type: 'reminder',
+                taskId: task.id,
+                title: '⏰ Reminder: ' + task.title,
+                meta: isPast
+                  ? 'Was due ' + reminderTime.toLocaleString('en', { dateStyle: 'short', timeStyle: 'short' })
+                  : 'At ' + reminderTime.toLocaleString('en', { dateStyle: 'short', timeStyle: 'short' }),
+              });
+            }
+          }
+        }
+
+        // Overdue: has a past due_date and not completed
+        if (task.due_date && task.due_date < today) {
+          const id = 'overdue-' + task.id;
+          if (!this.dismissedNotifs.includes(id)) {
+            items.push({
+              id,
+              type: 'overdue',
+              taskId: task.id,
+              title: task.title,
+              meta: '⚠️ Overdue since ' + new Date(task.due_date + 'T00:00:00').toLocaleDateString('en', { day: 'numeric', month: 'short' }),
+            });
+          }
+        }
+
+        // Due today: show for all tasks due today that aren't completed
+        if (task.due_date === today) {
+          const id = 'due-today-' + task.id;
+          // Only show if not already shown as a reminder notification to avoid duplicates
+          const alreadyReminder = items.some(it => it.taskId === task.id && it.type === 'reminder');
+          if (!alreadyReminder && !this.dismissedNotifs.includes(id)) {
+            items.push({
+              id,
+              type: 'due-today',
+              taskId: task.id,
+              title: task.title,
+              meta: '📅 Due today',
+            });
+          }
+        }
+      });
+
+      // Sort: overdue first, then reminders, then due-today
+      const typeOrder = { overdue: 0, reminder: 1, 'due-today': 2 };
+      return items.sort((a, b) => (typeOrder[a.type] ?? 9) - (typeOrder[b.type] ?? 9));
+    },
+
+    dismissNotif(id) {
+      if (!this.dismissedNotifs.includes(id)) {
+        this.dismissedNotifs.push(id);
+        localStorage.setItem('lumido_dismissed_notifs', JSON.stringify(this.dismissedNotifs));
+      }
+    },
+
+    markAllNotifRead() {
+      this.notifItems().forEach(item => this.dismissNotif(item.id));
+      this.notifOpen = false;
+    },
+
+    openNotif(item) {
+      const task = this.tasks.find(t => t.id === item.taskId);
+      if (task) {
+        this.currentTab = 'all-tasks';
+        this.selectTask(task);
+        setTimeout(() => {
+          const el = document.getElementById('task-item-' + task.id);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 150);
+      }
+      this.dismissNotif(item.id);
+      this.notifOpen = false;
+    },
+
+    async completeFromNotif(item) {
+      const task = this.tasks.find(t => t.id === item.taskId);
+      if (task) {
+        await this.toggleTask(task);
+        this.dismissNotif(item.id);
+      }
+    },
+
     /* ── Search ── */
     searchResults() {
       if (!this.searchQuery || this.searchQuery.trim().length < 1) return [];
@@ -243,6 +518,17 @@ document.addEventListener('alpine:init', () => {
         if (idx !== -1) this.tasks[idx] = updated;
         if (this.selectedTask?.id === task.id) this.selectedTask = updated;
         if (newStatus === 'done' && this.popSound) this.popSound.play();
+
+        // When unchecking a task, restore its notifications
+        if (newStatus === 'todo') {
+          const notifKeys = ['reminder-', 'overdue-', 'due-today-'];
+          notifKeys.forEach(prefix => {
+            const id = prefix + task.id;
+            const i = this.dismissedNotifs.indexOf(id);
+            if (i !== -1) this.dismissedNotifs.splice(i, 1);
+          });
+          localStorage.setItem('lumido_dismissed_notifs', JSON.stringify(this.dismissedNotifs));
+        }
       }
     },
 
@@ -408,8 +694,53 @@ document.addEventListener('alpine:init', () => {
     /* ── Update task list ── */
     async updateTaskList(task) {
       await this.api('PATCH', '/todo/tasks/' + task.id, { list_id: task.list_id });
-      // Update the list name shown
       task.list = this.listNameById(task.list_id);
+    },
+
+    /* ── Update priority ── */
+    async updatePriority(task) {
+      await this.api('PATCH', '/todo/tasks/' + task.id, { priority: task.priority });
+    },
+
+    /* ── Update recurring ── */
+    async updateRecurring(task) {
+      await this.api('PATCH', '/todo/tasks/' + task.id, { recurring: task.recurring });
+    },
+
+    /* ── Update reminder ── */
+    async updateReminder(task) {
+      await this.api('PATCH', '/todo/tasks/' + task.id, { reminder: task.reminder });
+    },
+
+    /* ── Task Color ── */
+    async updateTaskColor(task, color) {
+      const res = await this.api('PATCH', '/todo/tasks/' + task.id, { color });
+      if (res) {
+        const idx = this.tasks.findIndex(t => t.id === task.id);
+        if (idx !== -1) { this.tasks[idx].color = color; this.tasks[idx] = { ...this.tasks[idx] }; }
+        if (this.selectedTask?.id === task.id) this.selectedTask = { ...this.selectedTask, color };
+      }
+    },
+
+    /* ── Task Emoji ── */
+    async updateTaskEmoji(task, emoji) {
+      const res = await this.api('PATCH', '/todo/tasks/' + task.id, { emoji });
+      if (res) {
+        const idx = this.tasks.findIndex(t => t.id === task.id);
+        if (idx !== -1) { this.tasks[idx].emoji = emoji; this.tasks[idx] = { ...this.tasks[idx] }; }
+        if (this.selectedTask?.id === task.id) this.selectedTask = { ...this.selectedTask, emoji };
+      }
+    },
+
+    /* ── Pin task ── */
+    async togglePin(task) {
+      const pinned = !task.pinned;
+      const res = await this.api('PATCH', '/todo/tasks/' + task.id, { pinned });
+      if (res) {
+        const idx = this.tasks.findIndex(t => t.id === task.id);
+        if (idx !== -1) { this.tasks[idx].pinned = pinned; this.tasks[idx] = { ...this.tasks[idx] }; }
+        if (this.selectedTask?.id === task.id) this.selectedTask = { ...this.selectedTask, pinned };
+      }
     },
 
     /* ── Day modal ── */

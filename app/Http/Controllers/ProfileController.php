@@ -22,19 +22,73 @@ class ProfileController extends Controller
     }
 
     /**
-     * Update the user's profile information.
+     * Update the user's profile information via AJAX.
      */
-    public function update(ProfileUpdateRequest $request): RedirectResponse
+    public function updateAjax(Request $request)
     {
-        $request->user()->fill($request->validated());
+        $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email,'.$request->user()->id],
+        ]);
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+        $user = $request->user();
+        $user->fill($request->only(['name', 'email']));
+
+        if ($user->isDirty('email')) {
+            $user->email_verified_at = null;
         }
 
-        $request->user()->save();
+        $user->save();
 
-        return Redirect::route('profile.edit')->with('status', 'profile-updated');
+        return response()->json([
+            'status' => 'profile-updated',
+            'user' => [
+                'name' => $user->name,
+                'email' => $user->email,
+            ]
+        ]);
+    }
+
+    /**
+     * Update the user's password via AJAX.
+     */
+    public function updatePasswordAjax(Request $request)
+    {
+        $validated = $request->validate([
+            'current_password' => ['required', 'current_password'],
+            'password' => ['required', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
+        ]);
+
+        $request->user()->update([
+            'password' => \Illuminate\Support\Facades\Hash::make($validated['password']),
+        ]);
+
+        return response()->json(['status' => 'password-updated']);
+    }
+
+    /**
+     * Update the user's avatar via AJAX.
+     */
+    public function updateAvatarAjax(Request $request)
+    {
+        $request->validate([
+            'avatar' => ['required', 'image', 'max:2048'], // 2MB max
+        ]);
+
+        $user = $request->user();
+        
+        if ($user->profile_photo && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->profile_photo)) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($user->profile_photo);
+        }
+
+        $path = $request->file('avatar')->store('avatars', 'public');
+        $user->profile_photo = $path;
+        $user->save();
+
+        return response()->json([
+            'status' => 'avatar-updated',
+            'avatar_url' => asset('storage/' . $path)
+        ]);
     }
 
     /**

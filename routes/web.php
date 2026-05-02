@@ -25,6 +25,11 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+    // AJAX Settings Routes
+    Route::patch('/profile/ajax', [ProfileController::class, 'updateAjax']);
+    Route::patch('/profile/password/ajax', [ProfileController::class, 'updatePasswordAjax']);
+    Route::post('/profile/avatar/ajax', [ProfileController::class, 'updateAvatarAjax']);
+
     /* ── Todo API ── */
     Route::get('/todo/bootstrap',                       [TodoController::class, 'bootstrap']);
     Route::post('/todo/lists',                          [TodoController::class, 'storelist']);
@@ -40,6 +45,23 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/todo/tasks/{taskId}/attachments',     [TodoController::class, 'storeAttachment']);
     Route::delete('/todo/attachments/{id}',             [TodoController::class, 'destroyAttachment']);
+});
+
+/* ── Admin Routes ── */
+Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/dashboard', [\App\Http\Controllers\AdminController::class, 'dashboard'])->name('dashboard');
+    
+    Route::get('/users', [\App\Http\Controllers\AdminController::class, 'users'])->name('users');
+    Route::patch('/users/{user}/role', [\App\Http\Controllers\AdminController::class, 'updateRole'])->name('users.role');
+    Route::delete('/users/{user}', [\App\Http\Controllers\AdminController::class, 'deleteUser'])->name('users.delete');
+    
+    Route::get('/tasks', [\App\Http\Controllers\AdminController::class, 'tasks'])->name('tasks');
+    Route::delete('/tasks/{id}', [\App\Http\Controllers\AdminController::class, 'deleteTask'])->name('tasks.delete');
+    
+    Route::get('/logs', [\App\Http\Controllers\AdminController::class, 'logs'])->name('logs');
+    
+    Route::get('/settings', [\App\Http\Controllers\AdminController::class, 'settings'])->name('settings');
+    Route::post('/settings', [\App\Http\Controllers\AdminController::class, 'updateSettings'])->name('settings.update');
 });
 
 require __DIR__.'/auth.php';
