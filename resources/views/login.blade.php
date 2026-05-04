@@ -230,6 +230,18 @@
     [data-theme="dark"] .auth-footer a { color: #ddd; border-color: rgba(255,255,255,0.2); }
     [data-theme="dark"] .auth-footer a:hover { border-color: #fff; color: #fff; }
     
+    .error-msg {
+      color: #e74c3c;
+      font-size: 12px;
+      margin-top: 6px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
     .theme-toggle { background: none; border: none; cursor: pointer; color: #555; padding: 8px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: 0.2s; }
     .theme-toggle:hover { background: rgba(0,0,0,0.04); color: #1a1a1a; }
     [data-theme="dark"] .theme-toggle { color: #888; }
@@ -277,7 +289,8 @@
       @csrf
       <div class="form-group">
         <label class="form-label">Email address</label>
-        <input type="email" name="email" class="form-control" placeholder="you@example.com" required autofocus>
+        <input type="email" name="email" class="form-control" placeholder="you@example.com" value="{{ old('email') }}" required autofocus>
+        @error('email') <div class="error-msg">{{ $message }}</div> @enderror
       </div>
       
       <div class="form-group">
@@ -285,6 +298,7 @@
         <input type="password" name="password" class="form-control" placeholder="••••••••" required>
         <a href="{{ route('password.request') }}" class="forgot-link">Forgot password?</a>
         <div style="clear:both;"></div>
+        @error('password') <div class="error-msg">{{ $message }}</div> @enderror
       </div>
       
       <button type="submit" class="btn-auth">Sign In</button>

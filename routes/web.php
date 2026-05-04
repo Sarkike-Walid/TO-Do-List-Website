@@ -29,6 +29,7 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile/ajax', [ProfileController::class, 'updateAjax']);
     Route::patch('/profile/password/ajax', [ProfileController::class, 'updatePasswordAjax']);
     Route::post('/profile/avatar/ajax', [ProfileController::class, 'updateAvatarAjax']);
+    Route::delete('/profile/avatar/ajax', [ProfileController::class, 'deleteAvatarAjax']);
 
     /* ── Todo API ── */
     Route::get('/todo/bootstrap',                       [TodoController::class, 'bootstrap']);

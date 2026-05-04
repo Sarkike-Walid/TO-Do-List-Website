@@ -92,6 +92,23 @@ class ProfileController extends Controller
     }
 
     /**
+     * Delete the user's avatar via AJAX.
+     */
+    public function deleteAvatarAjax(Request $request)
+    {
+        $user = $request->user();
+
+        if ($user->profile_photo && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->profile_photo)) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($user->profile_photo);
+        }
+
+        $user->profile_photo = null;
+        $user->save();
+
+        return response()->json(['status' => 'avatar-deleted']);
+    }
+
+    /**
      * Delete the user's account.
      */
     public function destroy(Request $request): RedirectResponse

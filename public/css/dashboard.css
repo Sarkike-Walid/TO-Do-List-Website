@@ -1321,3 +1321,80 @@ body.dashboard-body {
 [data-theme="dark"] .settings-input:focus { border-color: #c4a882; }
 [data-theme="dark"] .settings-modal .modal-box { background: #1a1a1a; }
 [data-theme="dark"] .settings-modal h3 { color: #fff; }
+
+/* ── Profile Delete & Crop Styles ── */
+.delete-photo-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: #e74c3c;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  margin: -5px auto 15px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.delete-photo-btn:hover {
+  background: rgba(231, 76, 60, 0.08);
+}
+.delete-photo-btn svg { opacity: 0.8; }
+
+.crop-modal h3 { text-align: center; }
+.crop-container {
+  width: 300px;
+  height: 300px;
+  margin: 0 auto 20px;
+  background: #000;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+  cursor: grab;
+  position: relative;
+  border: 1px solid rgba(196,168,130,0.2);
+}
+.crop-container:active { cursor: grabbing; }
+#crop-canvas { display: block; }
+
+.crop-controls {
+  margin-bottom: 24px;
+}
+.zoom-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #bbb;
+  margin-bottom: 8px;
+}
+.zoom-control input[type="range"] {
+  flex: 1;
+  height: 4px;
+  background: rgba(0,0,0,0.06);
+  border-radius: 2px;
+  appearance: none;
+  cursor: pointer;
+  margin: 0;
+}
+.zoom-control input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #c4a882;
+  border-radius: 50%;
+  border: none;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.crop-hint {
+  font-size: 11px;
+  color: #bbb;
+  text-align: center;
+}
+
+[data-theme="dark"] .zoom-control input[type="range"] { background: rgba(255,255,255,0.1); }
+[data-theme="dark"] .crop-container { background: #000; border-color: rgba(255,255,255,0.1); }

@@ -7,34 +7,35 @@
 document.addEventListener('alpine:init', () => {
   Alpine.data('dashboard', () => ({
     /* ── State ── */
-    currentTab:    'my-day',
-    tasks:         [],
-    lists:         [],        // [{id, name, color}, ...]
-    tags:          [],        // [{id, name, color}, ...]
-    newTaskText:   '',
-    newTaskList:   null,      // list id (number)
-    selectedTask:  null,
+    currentTab: 'my-day',
+    tasks: [],
+    lists: [],        // [{id, name, color}, ...]
+    tags: [],        // [{id, name, color}, ...]
+    newTaskText: '',
+    newTaskList: null,      // list id (number)
+    selectedTask: null,
     showListModal: false,
-    showTagModal:  false,
+    showTagModal: false,
     showTaskModal: false,
-    newListName:   '',
-    newTagName:    '',
+    newListName: '',
+    newTagName: '',
     modalTaskText: '',
     modalTaskList: null,
-    modalTaskDay:  0,
-    userName:      '',
-    popSound:      null,
-    darkMode:      false,
-    searchQuery:   '',
-    searchOpen:    false,
-    loading:       false,
-    filterStatus:  'all',
-    sortBy:        'none',
-    notifOpen:     false,
+    modalTaskDay: 0,
+    userName: '',
+    popSound: null,
+    darkMode: false,
+    searchQuery: '',
+    searchOpen: false,
+    loading: false,
+    filterStatus: 'all',
+    sortBy: 'none',
+    notifOpen: false,
     dismissedNotifs: [],
-    taskColors: ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#c4a882','#e91e63','#607d8b'],
-    quickEmojis: ['✅','🔥','📚','🕒','⭐','🎯','💡','📌','🚀','💪','⚡','🎉','🧠','🏆','⏰','🗓️','📋','🛠️'],
-    
+    taskColors: ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c', '#3498db', '#9b59b6', '#c4a882', '#e91e63', '#607d8b'],
+    quickEmojis: ['✅', '🔥', '📚', '🕒', '⭐', '🎯', '💡', '📌', '🚀', '💪', '⚡', '🎉', '🧠', '🏆', '⏰', '🗓️', '📋', '🛠️'],
+    toasts: [],
+
     /* ── Settings State ── */
     showSettingsModal: false,
     settingsTab: 'profile',
@@ -47,6 +48,17 @@ document.addEventListener('alpine:init', () => {
     settingsConfirmPassword: '',
     theme: 'light',
 
+    /* ── Crop State ── */
+    showCropModal: false,
+    cropImage: null,
+    cropZoom: 1,
+    cropX: 0,
+    cropY: 0,
+    cropDragging: false,
+    cropDragStartX: 0,
+    cropDragStartY: 0,
+    cropFile: null,
+
     /* ── Init ── */
     async init() {
       this.userName = document.getElementById('app-user-name')?.value || 'User';
@@ -55,31 +67,31 @@ document.addEventListener('alpine:init', () => {
       this.popSound = this.createPopSound();
 
       const validTabs = ['my-day', 'next-7-days', 'all-tasks', 'my-lists', 'tags'];
-      
+
       // Check URL path for initial tab
       const pathParts = window.location.pathname.split('/');
       const pathTab = pathParts.length > 2 ? pathParts[2] : '';
       if (validTabs.includes(pathTab)) {
-          this.currentTab = pathTab;
+        this.currentTab = pathTab;
       }
 
       // Watch for changes to currentTab and update the URL
       this.$watch('currentTab', (value) => {
-          const expectedPath = '/dashboard/' + value;
-          if (window.location.pathname !== expectedPath && validTabs.includes(value)) {
-              window.history.pushState(null, '', expectedPath);
-          }
+        const expectedPath = '/dashboard/' + value;
+        if (window.location.pathname !== expectedPath && validTabs.includes(value)) {
+          window.history.pushState(null, '', expectedPath);
+        }
       });
 
       // Handle browser back/forward buttons
       window.addEventListener('popstate', () => {
-          const parts = window.location.pathname.split('/');
-          const tab = parts.length > 2 ? parts[2] : 'my-day';
-          if (validTabs.includes(tab)) {
-              this.currentTab = tab;
-          } else {
-              this.currentTab = 'my-day';
-          }
+        const parts = window.location.pathname.split('/');
+        const tab = parts.length > 2 ? parts[2] : 'my-day';
+        if (validTabs.includes(tab)) {
+          this.currentTab = tab;
+        } else {
+          this.currentTab = 'my-day';
+        }
       });
 
       // Restore dark mode from localStorage
@@ -135,6 +147,175 @@ document.addEventListener('alpine:init', () => {
         }
       } catch (err) {
         this.showToast('Error uploading photo.', true);
+      }
+    },
+
+    /* ── Crop Modal Methods ── */
+    openCropModal(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      this.cropFile = file;
+      this.cropZoom = 1;
+      this.cropX = 0;
+      this.cropY = 0;
+      this.showCropModal = true;
+
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        this.cropImage = new Image();
+        this.cropImage.onload = () => {
+          this.$nextTick(() => this.initCropCanvas());
+        };
+        this.cropImage.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    },
+
+    initCropCanvas() {
+      const canvas = document.getElementById('crop-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      this.drawCrop(ctx, canvas);
+
+      canvas.onmousedown = (e) => {
+        this.cropDragging = true;
+        this.cropDragStartX = e.clientX - this.cropX;
+        this.cropDragStartY = e.clientY - this.cropY;
+      };
+      canvas.onmousemove = (e) => {
+        if (!this.cropDragging) return;
+        this.cropX = e.clientX - this.cropDragStartX;
+        this.cropY = e.clientY - this.cropDragStartY;
+        this.drawCrop(ctx, canvas);
+      };
+      canvas.onmouseup = () => { this.cropDragging = false; };
+      canvas.onmouseleave = () => { this.cropDragging = false; };
+
+      canvas.ontouchstart = (e) => {
+        const t = e.touches[0];
+        this.cropDragging = true;
+        this.cropDragStartX = t.clientX - this.cropX;
+        this.cropDragStartY = t.clientY - this.cropY;
+      };
+      canvas.ontouchmove = (e) => {
+        if (!this.cropDragging) return;
+        e.preventDefault();
+        const t = e.touches[0];
+        this.cropX = t.clientX - this.cropDragStartX;
+        this.cropY = t.clientY - this.cropDragStartY;
+        this.drawCrop(ctx, canvas);
+      };
+      canvas.ontouchend = () => { this.cropDragging = false; };
+
+      canvas.onwheel = (e) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.05 : 0.05;
+        this.cropZoom = Math.max(1, Math.min(3, this.cropZoom + delta));
+        document.getElementById('crop-zoom').value = this.cropZoom;
+        this.drawCrop(ctx, canvas);
+      };
+    },
+
+    drawCrop(ctx, canvas) {
+      if (!this.cropImage) return;
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, w, h);
+
+      const img = this.cropImage;
+      const scale = this.cropZoom;
+      const aspect = img.width / img.height;
+      let drawW, drawH;
+      if (aspect > 1) {
+        drawH = w * scale;
+        drawW = drawH * aspect;
+      } else {
+        drawW = w * scale;
+        drawH = drawW / aspect;
+      }
+      const dx = (w - drawW) / 2 + this.cropX;
+      const dy = (h - drawH) / 2 + this.cropY;
+      ctx.drawImage(img, dx, dy, drawW, drawH);
+
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.beginPath();
+      ctx.arc(w / 2, h / 2, w / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+
+      ctx.strokeStyle = 'rgba(196,168,130,0.6)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(w / 2, h / 2, w / 2 - 1, 0, Math.PI * 2);
+      ctx.stroke();
+    },
+
+    updateCropZoom(e) {
+      this.cropZoom = parseFloat(e.target.value);
+      const canvas = document.getElementById('crop-canvas');
+      if (canvas) this.drawCrop(canvas.getContext('2d'), canvas);
+    },
+
+    closeCropModal() {
+      this.showCropModal = false;
+      this.cropImage = null;
+      this.cropFile = null;
+      if (this.$refs.avatarInput) this.$refs.avatarInput.value = '';
+    },
+
+    async applyCrop() {
+      const canvas = document.getElementById('crop-canvas');
+      if (!canvas) return;
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          this.showToast('Could not generate image.', true);
+          return;
+        }
+        const formData = new FormData();
+        formData.append('avatar', blob, 'avatar.png');
+        try {
+          const res = await fetch('/profile/avatar/ajax', {
+            method: 'POST',
+            headers: { 
+              'X-CSRF-TOKEN': this.csrfToken(),
+              'Accept': 'application/json'
+            },
+            body: formData
+          });
+          const data = await res.json();
+          if (res.ok && data.status === 'avatar-updated') {
+            this.userAvatar = data.avatar_url;
+            this.showToast('Profile photo updated.');
+            this.closeCropModal();
+          } else {
+            this.showToast(data.message || 'Failed to upload photo.', true);
+          }
+        } catch (err) {
+          console.error(err);
+          this.showToast('Error uploading photo.', true);
+        }
+      }, 'image/png');
+    },
+
+    async deleteAvatar() {
+      try {
+        const res = await fetch('/profile/avatar/ajax', {
+          method: 'DELETE',
+          headers: {
+            'X-CSRF-TOKEN': this.csrfToken(),
+            'Accept': 'application/json'
+          }
+        });
+        const data = await res.json();
+        if (data.status === 'avatar-deleted') {
+          this.userAvatar = '';
+          this.showToast('Profile photo removed.');
+        } else {
+          this.showToast('Failed to remove photo.', true);
+        }
+      } catch (err) {
+        this.showToast('Error removing photo.', true);
       }
     },
 
@@ -203,8 +384,8 @@ document.addEventListener('alpine:init', () => {
         method,
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRF-TOKEN':  this.csrfToken(),
-          'Accept':        'application/json',
+          'X-CSRF-TOKEN': this.csrfToken(),
+          'Accept': 'application/json',
         },
       };
       if (body) opts.body = JSON.stringify(body);
@@ -222,11 +403,11 @@ document.addEventListener('alpine:init', () => {
       const data = await this.api('GET', '/todo/bootstrap');
       if (data) {
         this.lists = data.lists || [];
-        this.tags  = data.tags  || [];
+        this.tags = data.tags || [];
         this.tasks = data.tasks || [];
         // Default list for new tasks
         if (!this.newTaskList && this.lists.length) {
-          this.newTaskList  = this.lists[0].id;
+          this.newTaskList = this.lists[0].id;
           this.modalTaskList = this.lists[0].id;
         }
       }
@@ -256,11 +437,11 @@ document.addEventListener('alpine:init', () => {
             o.type = 'sine';
             o.frequency.setValueAtTime(800, ctx.currentTime);
             o.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.05);
-            o.frequency.exponentialRampToValueAtTime(600,  ctx.currentTime + 0.15);
-            g.gain.setValueAtTime(0.3,  ctx.currentTime);
+            o.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.15);
+            g.gain.setValueAtTime(0.3, ctx.currentTime);
             g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
             o.start(ctx.currentTime); o.stop(ctx.currentTime + 0.2);
-          } catch(e) {}
+          } catch (e) { }
         }
       };
     },
@@ -276,7 +457,7 @@ document.addEventListener('alpine:init', () => {
 
     getDayLabel(offset) {
       const d = new Date(); d.setDate(d.getDate() + offset);
-      const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       if (offset === 0) return '<strong>Today</strong> ' + days[d.getDay()];
       if (offset === 1) return '<strong>Tomorrow</strong> ' + days[d.getDay()];
       return '<strong>' + days[d.getDay()] + '</strong>';
@@ -315,8 +496,8 @@ document.addEventListener('alpine:init', () => {
     /* ── Filter & Sort ── */
     filteredSortedTasks() {
       let t = [...this.tasks];
-      if (this.filterStatus === 'active')    t = t.filter(x => !x.completed);
-      if (this.filterStatus === 'completed') t = t.filter(x =>  x.completed);
+      if (this.filterStatus === 'active') t = t.filter(x => !x.completed);
+      if (this.filterStatus === 'completed') t = t.filter(x => x.completed);
       if (this.sortBy === 'name') {
         t.sort((a, b) => a.title.localeCompare(b.title));
       } else if (this.sortBy === 'date') {
@@ -339,7 +520,7 @@ document.addEventListener('alpine:init', () => {
     /* ── Notifications ── */
     notifItems() {
       const items = [];
-      const now   = new Date();
+      const now = new Date();
       const today = this.getDateStr(0);
 
       this.tasks.forEach(task => {
@@ -349,7 +530,7 @@ document.addEventListener('alpine:init', () => {
         if (task.reminder) {
           const reminderTime = new Date(task.reminder);
           const diffMs = reminderTime - now;
-          const diffH  = diffMs / (1000 * 60 * 60);
+          const diffH = diffMs / (1000 * 60 * 60);
           if (diffH <= 24) {
             const id = 'reminder-' + task.id;
             if (!this.dismissedNotifs.includes(id)) {
@@ -465,11 +646,11 @@ document.addEventListener('alpine:init', () => {
         this.currentTab = 'all-tasks';
         const t = this.tasks.find(x => x.id === r.ref.id);
         this.selectTask(t || r.ref);
-        setTimeout(() => { 
+        setTimeout(() => {
           try {
             const el = document.getElementById('task-item-' + (t ? t.id : r.ref.id));
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          } catch(e) {}
+          } catch (e) { }
         }, 150);
       } else if (r.type === 'List') {
         this.currentTab = 'my-lists';
@@ -477,7 +658,7 @@ document.addEventListener('alpine:init', () => {
         this.currentTab = 'tags';
       }
       this.searchQuery = '';
-      this.searchOpen  = false;
+      this.searchOpen = false;
     },
 
     /* ── Add tasks ── */
@@ -486,10 +667,10 @@ document.addEventListener('alpine:init', () => {
       const listId = this.newTaskList || this.lists[0]?.id;
       if (!listId) return;
       const task = await this.api('POST', '/todo/tasks', {
-        title:     this.newTaskText.trim(),
-        list_id:   listId,
+        title: this.newTaskText.trim(),
+        list_id: listId,
         is_my_day: true,
-        due_date:  this.getDateStr(0),
+        due_date: this.getDateStr(0),
       });
       if (task) this.tasks.push(task);
       this.newTaskText = '';
@@ -500,13 +681,13 @@ document.addEventListener('alpine:init', () => {
       const listId = this.modalTaskList || this.lists[0]?.id;
       if (!listId) return;
       const task = await this.api('POST', '/todo/tasks', {
-        title:    this.modalTaskText.trim(),
-        list_id:  listId,
+        title: this.modalTaskText.trim(),
+        list_id: listId,
         due_date: this.getDateStr(this.modalTaskDay),
       });
       if (task) this.tasks.push(task);
-      this.modalTaskText  = '';
-      this.showTaskModal  = false;
+      this.modalTaskText = '';
+      this.showTaskModal = false;
     },
 
     /* ── Toggle task completion ── */
@@ -544,7 +725,7 @@ document.addEventListener('alpine:init', () => {
         this.lists.push(list);
         if (!this.newTaskList) { this.newTaskList = list.id; this.modalTaskList = list.id; }
       }
-      this.newListName  = '';
+      this.newListName = '';
       this.showListModal = false;
     },
 
@@ -561,7 +742,7 @@ document.addEventListener('alpine:init', () => {
       if (!this.newTagName.trim()) return;
       const tag = await this.api('POST', '/todo/tags', { name: this.newTagName.trim() });
       if (tag && !this.tags.find(t => t.id === tag.id)) this.tags.push(tag);
-      this.newTagName  = '';
+      this.newTagName = '';
       this.showTagModal = false;
     },
 
@@ -622,16 +803,16 @@ document.addEventListener('alpine:init', () => {
     async uploadAttachment(task, event) {
       const file = event.target.files[0];
       if (!file) return;
-      
+
       const formData = new FormData();
       formData.append('file', file);
-      
+
       const res = await fetch('/todo/tasks/' + task.id + '/attachments', {
         method: 'POST',
         headers: { 'X-CSRF-TOKEN': this.csrfToken(), 'Accept': 'application/json' },
         body: formData
       });
-      
+
       if (res.ok) {
         const att = await res.json();
         const idx = this.tasks.findIndex(t => t.id === task.id);
@@ -662,10 +843,10 @@ document.addEventListener('alpine:init', () => {
         const idx = this.tasks.findIndex(t => t.id === task.id);
         if (idx !== -1) {
           if (res.attached) {
-            this.tasks[idx].tag    = tag.name;
+            this.tasks[idx].tag = tag.name;
             this.tasks[idx].tag_id = tag.id;
           } else {
-            this.tasks[idx].tag    = '';
+            this.tasks[idx].tag = '';
             this.tasks[idx].tag_id = null;
           }
           if (this.selectedTask?.id === task.id) this.selectedTask = this.tasks[idx];
@@ -685,7 +866,7 @@ document.addEventListener('alpine:init', () => {
       } else if (task.due_date === this.getDateStr(0)) {
         task.is_my_day = true;
       }
-      await this.api('PATCH', '/todo/tasks/' + task.id, { 
+      await this.api('PATCH', '/todo/tasks/' + task.id, {
         due_date: task.due_date,
         is_my_day: task.is_my_day
       });
@@ -745,7 +926,7 @@ document.addEventListener('alpine:init', () => {
 
     /* ── Day modal ── */
     openDayTaskModal(dayOffset) {
-      this.modalTaskDay  = dayOffset;
+      this.modalTaskDay = dayOffset;
       this.modalTaskText = '';
       this.modalTaskList = this.lists[0]?.id || null;
       this.showTaskModal = true;
@@ -754,6 +935,14 @@ document.addEventListener('alpine:init', () => {
     scrollDays(dir) {
       const el = document.getElementById('days-scroll');
       if (el) el.scrollBy({ left: dir * 240, behavior: 'smooth' });
+    },
+
+    showToast(msg, isError = false) {
+      const id = Date.now();
+      this.toasts.push({ id, msg, error: isError });
+      setTimeout(() => {
+        this.toasts = this.toasts.filter(t => t.id !== id);
+      }, 4000);
     },
   }));
 });
